@@ -15,7 +15,7 @@ namespace WebApi1
 {
     public class Program
     {
-        public  static void Main(string[] args)
+        public  async static Task Main(string[] args)
         {
             var host = CreateHostBuilder(args)
                          .Build();
@@ -26,9 +26,10 @@ namespace WebApi1
                 try
                 {
                     //Seed Default Users
+                    var context = services.GetRequiredService<UsersContext>();
                     var userManager = services.GetRequiredService<UserManager<User>>();
                     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-                    ApplicationDbContextSeed.SeedEssentialAsync(userManager, roleManager);
+                    await ApplicationDbContextSeed.SeedEssentialAsync(userManager, roleManager,context); 
                 }
                 catch (Exception ex)
                 {

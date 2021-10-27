@@ -16,6 +16,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WebApi1.DAO;
+using WebApi1.DAO.Repositories;
 using WebApi1.Models;
 using WebApi1.Services;
 
@@ -34,43 +36,27 @@ namespace WebApi1
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
-            services.AddIdentity<User, IdentityRole>().AddEntityFrameworkStores<UsersContext>();
+            services.AddIdentity<User, IdentityRole>(opts => {
+                opts.Password.RequiredLength = 1;   
+                opts.Password.RequireNonAlphanumeric = false;   
+                opts.Password.RequireLowercase = false; 
+                opts.Password.RequireUppercase = false; 
+                opts.Password.RequireDigit = false; 
+            }).AddEntityFrameworkStores<UsersContext>();
+            services.AddScoped<GenreService>();
             services.AddScoped<UserService>();
+            services.AddScoped<CountryService>();
+            services.AddScoped<MovieService>();
+            services.AddTransient(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+            services.AddTransient<IGenreRepository, GenreRepository>();
+            services.AddTransient<ICountryRepository, CountryRepository>();
+            services.AddTransient<IMovieRepository, MovieRepository>();
+            services.AddTransient<IUserRepository, UserRepository>();
             string con = "Server=(localdb)\\mssqllocaldb;Database=usersdbstore;Trusted_Connection=True;";
-            // устанавливаем контекст данных
             services.AddDbContext<UsersContext>(options => options.UseSqlServer(con));
             var authOoptionsConfiguration = Configuration.GetSection("Auth");
             services.Configure<AuthOptions>(authOoptionsConfiguration);
-            //services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            //        .AddJwtBearer(options =>
-            //        {
-            //            options.RequireHttpsMetadata = false;
-            //            options.TokenValidationParameters = new TokenValidationParameters
-            //            {
-            //                // укзывает, будет ли валидироваться издатель при валидации токена
-            //                ValidateIssuer = true,
-            //                // строка, представляющая издателя
-            //                ValidIssuer = Configuration["Auth:Issuer"],
-
-            //                // будет ли валидироваться потребитель токена
-            //                ValidateAudience = true,
-            //                // установка потребителя токена
-            //                ValidAudience = Configuration["Auth:Audience"],
-            //                // будет ли валидироваться время существования
-            //                ValidateLifetime = true,
-
-            //                // установка ключа безопасности
-            //                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Auth:Secret"])),
-            //                // валидация ключа безопасности
-            //                ValidateIssuerSigningKey = true,
-            //            };
-            //        });
-
-
-            services.AddControllers().AddNewtonsoftJson(options =>
-     options.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore
- );
-
+ 
             services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -101,8 +87,11 @@ namespace WebApi1
                     }
                     );
             });
+            services.AddControllers().AddNewtonsoftJson(options =>
+ options.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore
+);
         }
-    
+
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -116,7 +105,10 @@ namespace WebApi1
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
-
+            app.UseCors(x => x
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader());
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();

@@ -1,6 +1,7 @@
 ﻿using AuthTutorial.Auth.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System;
@@ -10,6 +11,8 @@ using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using WebApi1.Constants;
+using WebApi1.DAO.Repositories;
 using WebApi1.Models;
 using WebApi1.Models.ViewModels;
 
@@ -21,61 +24,75 @@ namespace WebApi1.Services
         private readonly UserManager<User> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly AuthOptions _options;
-        public UserService(UserManager<User> userManager, RoleManager<IdentityRole> roleManager,IOptions<AuthOptions>options,UsersContext context)
+        private readonly IUserRepository _userRepository;
+        public UserService(UserManager<User> userManager, RoleManager<IdentityRole> roleManager, IOptions<AuthOptions> options, UsersContext context, IUserRepository userRepository)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _options = options.Value;
             _context = context;
+            _userRepository = userRepository;
         }
         public async Task<string> RegisterAsync(RegisterViewModel model)
         {
             var user = new User()
             {
-                UserName=model.Email,
-                Email=model.Email,
-                Year=model.Year
+                UserName = model.Email,
+                Email = model.Email,
+                Year = model.Year
             };
-       var result = await _userManager.CreateAsync(user, model.Password);
+            var result = await _userManager.CreateAsync(user, model.Password);
             if (result.Succeeded)
             {
+                await _userManager.AddToRoleAsync(user, Authorization.Roles.admin.ToString());
                 return $"User registrated with name {model.Email}";
             }
             return "Fail!";
 
         }
 
-        public async Task<Object> GetTokenAsync(RequestTokenModel model)
+        public async Task<AccessModel> GetTokenAsync(RequestTokenModel model)
         {
+            AccessModel accessModel = new AccessModel();
             var user = await _userManager.FindByEmailAsync(model.Email);
             if (user == null)
             {
-                return new {message="User with this name doesn't exist!" };
+                accessModel.message = "User with this name doesn't exist!";
+                return accessModel;
             }
             if (await _userManager.CheckPasswordAsync(user, model.Password))
             {
                 RefreshToken finalRefreshToken;
                 if (user.RefreshTokens.Any(u => u.IsActive))
                 {
-                    var activeRefreshToken = user.RefreshTokens.FirstOrDefault(t => t.IsActive);
-                    finalRefreshToken = activeRefreshToken;
+                    accessModel.RefreshToken = user.RefreshTokens.FirstOrDefault(t => t.IsActive);
                 }
                 else
                 {
                     var refreshToken = CreateRefreshToken();
-                    finalRefreshToken = refreshToken;
+                    accessModel.RefreshToken = refreshToken;
                     user.RefreshTokens.Add(refreshToken);
                     _context.Update(user);
                     _context.SaveChanges();
                 }
-                return new {
-                    token = CreateJwtToken(user).Result,
-                    refreshToken=finalRefreshToken
-                };
+                accessModel.JWTtoken = await CreateJwtToken(user);
+                return accessModel;
             }
-            return new { message = "Not valid password!" };
+            accessModel.message = "Not valid password!";
+            return accessModel;
         }
-        private async Task<string>CreateJwtToken(User user)
+
+        public async Task<IEnumerable<User>> GetAll()
+        {
+            return await _userManager.Users.ToListAsync();
+        }
+        public async Task<List<string>> GetAllUserRoles(string email)
+        {
+            var user = _userManager.Users.FirstOrDefault(u => u.Email == email);
+            var userRoles = await _userManager.GetRolesAsync(user) as List<string>;
+            return userRoles;
+        }
+        private async Task<string> CreateJwtToken(User user)
         {
             var userClaims = await _userManager.GetClaimsAsync(user);
             var roles = await _userManager.GetRolesAsync(user);
@@ -86,6 +103,7 @@ namespace WebApi1.Services
             }
             var claims = new List<Claim>()
             {
+                new Claim(JwtRegisteredClaimNames.UniqueName, user.Email),
                 new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
@@ -106,18 +124,20 @@ namespace WebApi1.Services
         {
             var randomNamber = new byte[32];
 
-            using(var generator=new RNGCryptoServiceProvider())
+            using (var generator = new RNGCryptoServiceProvider())
             {
                 generator.GetBytes(randomNamber);
                 return new RefreshToken
                 {
                     Token = Convert.ToBase64String(randomNamber),
-                    Expires=DateTime.Now.AddDays(10),
-                    Created=DateTime.Now
+                    Expires = DateTime.Now.AddDays(10),
+                    Created = DateTime.Now
                 };
             }
         }
-    
+
+
+
 
     }
 }

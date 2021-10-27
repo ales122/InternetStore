@@ -38,31 +38,43 @@ namespace WebApi1.Controllers
         
 
         [HttpPost("token")]
-        public async Task<ActionResult> GetTokenAsync(RequestTokenModel model)
+        public async Task<JsonResult> GetTokenAsync(RequestTokenModel model)
         {
             var result =await _userService.GetTokenAsync(model);
-            SetRefreshTokenInCookie(result.refreshToken.Token);
-            return Ok(result);
+            //SetRefreshTokenInCookie(result.RefreshToken.Token);
+            return new JsonResult(result);
         }
        
         [Authorize]
         [Route("private")]
         [HttpGet]
-        public ActionResult getPrivate()
+        public async Task<ActionResult<ProfileViewModel>> getPrivate()
         {
             if (User.Identity.IsAuthenticated)
             {
-                return Content($"{User.Identity.Name}");
+                ProfileViewModel profile = new ProfileViewModel();
+                profile.Name = User.Identity.Name;
+                profile.Roles =await _userService.GetAllUserRoles(profile.Name);
+                //var roles = User.Identity.Roles;
+                return Ok(profile);
             }
-           return Ok($"Fuck");
+            return NotFound();
           
         }
-        
+
+
         [Route("public")]
         [HttpGet]
         public ActionResult getPublic()
         {
             return Content($"User:{User.Identity.IsAuthenticated} {User.Identity.Name}");
+        }
+
+
+        [HttpGet("all")]
+        public async Task<IEnumerable<User>> GetAll()
+        {
+            return await _userService.GetAll();
         }
 
         private void SetRefreshTokenInCookie(string refreshToken)
